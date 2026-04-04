@@ -208,9 +208,9 @@ where
     /// Handles an accepted stream and prepares it for HTTP serving.
     ///
     /// The caller provides the accepted stream and peer socket address, which
-    /// usually come from a listener such as
-    /// [`tokio::net::TcpListener::accept`]. The socket address is also inserted
-    /// into each request as [`ConnectionInfo`].
+    /// usually come from a listener such as `tokio::net::TcpListener::accept`.
+    /// The socket address is also inserted into each request as
+    /// [`ConnectionInfo`].
     ///
     /// Without the `tls` feature, the returned value is a ready-to-poll
     /// [`Connection`]. With `tls` enabled, the returned value is a

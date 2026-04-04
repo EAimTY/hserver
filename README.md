@@ -1,5 +1,9 @@
 # hserver
 
+[![Version](https://img.shields.io/crates/v/hserver.svg?style=flat)](https://crates.io/crates/hserver)
+[![Documentation](https://img.shields.io/badge/docs-release-brightgreen.svg?style=flat)](https://docs.rs/hserver)
+[![License](https://img.shields.io/crates/l/hserver.svg?style=flat)](https://github.com/EAimTY/hserver/blob/master/LICENSE)
+
 `hserver` is a configurable HTTP server adaptor built on top of `hyper` and `tower`. It is designed for applications that want Hyper's connection engine without giving up control of the listener, accept loop, stream source, or task spawning strategy.
 
 It handles the repetitive integration work of:

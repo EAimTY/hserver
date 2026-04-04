@@ -1,6 +1,6 @@
 [package]
 name = "hserver"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["EAimTY <ea.imty@gmail.com>"]
 description = "Configurable HTTP server with explicit accept-loop control and optional Rustls support"
 edition = "2024"
