@@ -10,8 +10,8 @@ It handles the repetitive integration work of:
 
 - adapting a `tower::Service` into Hyper's service model,
 - configuring HTTP/1 and HTTP/2 through a shared connection builder,
-- attaching peer metadata to each request, and
-- optionally performing a Rustls TLS handshake before serving the connection,
+- attaching peer metadata to each request,
+- optionally performing a Rustls TLS handshake before serving the connection, and
 - exposing separate regular and upgrade-capable connection futures.
 
 ## Why hserver
@@ -26,15 +26,17 @@ This crate is a good fit when you need a server layer that is explicit, composab
 
 ## Feature flags
 
+All features are additive: enabling or disabling them never changes the signature of any existing API.
+
 - `http1` (default): enables [`ConnectionBuilder::http1`](https://docs.rs/hserver/latest/hserver/struct.ConnectionBuilder.html#method.http1).
 - `http2` (default): enables [`ConnectionBuilder::http2`](https://docs.rs/hserver/latest/hserver/struct.ConnectionBuilder.html#method.http2).
-- `tls`: enables Rustls support and changes [`Server::new`](https://docs.rs/hserver/latest/hserver/struct.Server.html#method.new), [`Server::handle`](https://docs.rs/hserver/latest/hserver/struct.Server.html#method.handle), and [`Server::handle_upgradable`](https://docs.rs/hserver/latest/hserver/struct.Server.html#method.handle_upgradable) to perform a TLS handshake before building the HTTP connection.
+- `tls`: adds the [`Tls`](https://docs.rs/hserver/latest/hserver/struct.Tls.html) transport, which performs a Rustls TLS handshake before serving the connection.
 
 At least one of `http1` or `http2` must be enabled.
 
 ## Example
 
-The example below works with and without the `tls` feature. With `tls` enabled, `handle` returns a [`TlsHandshake`](https://docs.rs/hserver/latest/hserver/struct.TlsHandshake.html), which is then awaited to obtain the HTTP [`Connection`](https://docs.rs/hserver/latest/hserver/struct.Connection.html).
+Any stream that is `AsyncRead + AsyncWrite + Unpin + 'static` can be served directly. The example below is identical with and without the `tls` feature, and plain-HTTP and TLS servers can coexist in the same binary.
 
 ```rust,no_run
 use std::{
@@ -76,31 +78,11 @@ impl Service<Request<Incoming>> for Hello {
 
 async fn run() -> std::io::Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", 3000)).await?;
-    let connection_builder = ConnectionBuilder::new();
-
-    let mut server = {
-        #[cfg(not(feature = "tls"))]
-        {
-            Server::new(connection_builder, Hello)
-        }
-
-        #[cfg(feature = "tls")]
-        {
-            let tls_config: std::sync::Arc<rustls::ServerConfig> =
-                unimplemented!("load a rustls::ServerConfig here");
-            Server::new(tls_config, connection_builder, Hello)
-        }
-    };
+    let mut server = Server::new(ConnectionBuilder::new(), Hello);
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
-        let accepted = server.handle(stream, peer_addr);
-
-        #[cfg(not(feature = "tls"))]
-        let connection = accepted;
-
-        #[cfg(feature = "tls")]
-        let connection = accepted.await?;
+        let connection = server.handle(stream, peer_addr);
 
         tokio::spawn(async move {
             if let Err(error) = connection.await {
@@ -111,11 +93,67 @@ async fn run() -> std::io::Result<()> {
 }
 ```
 
-If you need HTTP/1 upgrades such as WebSocket or `CONNECT`, call [`Server::handle_upgradable`](https://docs.rs/hserver/latest/hserver/struct.Server.html#method.handle_upgradable) instead. That returns an [`UpgradableConnection`](https://docs.rs/hserver/latest/hserver/struct.UpgradableConnection.html), or with `tls`, a [`TlsHandshake`](https://docs.rs/hserver/latest/hserver/struct.TlsHandshake.html) that resolves into one.
+To serve a connection over TLS, pass the [`Tls`](https://docs.rs/hserver/latest/hserver/struct.Tls.html) transport instead of the raw stream. It carries a `rustls::ServerConfig` together with the accepted stream and performs the Rustls handshake before the HTTP connection starts, so handshake failures can be handled separately from connection errors:
+
+```rust,no_run
+use std::{
+    convert::Infallible,
+    future::{ready, Ready},
+    sync::Arc,
+    task::{Context, Poll},
+};
+
+use hserver::{ConnectionBuilder, Incoming, Server, Tls};
+use http::{Request, Response};
+use http_body_util::Full;
+use hyper::body::Bytes;
+use tokio::net::TcpListener;
+use tower_service::Service;
+
+#[derive(Clone)]
+struct Hello;
+
+impl Service<Request<Incoming>> for Hello {
+    type Response = Response<Full<Bytes>>;
+    type Error = Infallible;
+    type Future = Ready<Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _request: Request<Incoming>) -> Self::Future {
+        ready(Ok(Response::new(Full::from("hello\n"))))
+    }
+}
+
+async fn run_tls(tls_config: Arc<rustls::ServerConfig>) -> std::io::Result<()> {
+    let listener = TcpListener::bind(("127.0.0.1", 3443)).await?;
+    let mut server = Server::new(ConnectionBuilder::new(), Hello);
+
+    loop {
+        let (stream, peer_addr) = listener.accept().await?;
+        let handshake = server.handle(Tls(tls_config.clone(), stream), peer_addr);
+
+        tokio::spawn(async move {
+            match handshake.await {
+                Ok(connection) => {
+                    if let Err(error) = connection.await {
+                        eprintln!("connection error: {error}");
+                    }
+                }
+                Err(error) => eprintln!("tls handshake error: {error}"),
+            }
+        });
+    }
+}
+```
+
+If you need HTTP/1 upgrades such as WebSocket or `CONNECT`, call [`Server::handle_upgradable`](https://docs.rs/hserver/latest/hserver/struct.Server.html#method.handle_upgradable) instead. That returns an [`UpgradableConnection`](https://docs.rs/hserver/latest/hserver/struct.UpgradableConnection.html), or an [`UpgradableTlsHandshake`](https://docs.rs/hserver/latest/hserver/struct.UpgradableTlsHandshake.html) that resolves into one when a `Tls` transport is passed.
 
 ## Request metadata
 
-Each request gets a [`ConnectionInfo`](https://docs.rs/hserver/latest/hserver/struct.ConnectionInfo.html) value in its extensions. Handlers can read it to inspect the peer socket address that accepted the connection.
+Each request gets a [`ConnectionInfo`](https://docs.rs/hserver/latest/hserver/struct.ConnectionInfo.html) value in its extensions. Handlers can read it to inspect the peer socket address of the connection that carried the request.
 
 ## Shutdown behavior
 
