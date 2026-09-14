@@ -4,6 +4,7 @@
 #[cfg(not(any(feature = "http1", feature = "http2")))]
 compile_error!("At least one of the features `http1` or `http2` must be enabled");
 
+use crate::sealed::Sealed;
 use http::{Request, Response};
 use http_body::Body;
 use hyper::service::Service as HyperService;
@@ -114,7 +115,7 @@ where
 /// returns a ready-to-poll [`Connection`]. With the `tls` feature, it is also implemented for the
 /// `Tls` transport, in which case [`Server::handle`] returns a `TlsHandshake` future that resolves
 /// into a `Connection` once the Rustls handshake completes.
-pub trait Transport<S, B>: sealed::Sealed + Sized {
+pub trait Transport<S, B>: Sealed + Sized {
     /// The future returned by [`Server::handle`] for this transport.
     type Handle;
 
@@ -138,7 +139,7 @@ pub trait Transport<S, B>: sealed::Sealed + Sized {
 ///
 /// Unlike [`Transport`], implementing this trait requires the transport to be sendable between
 /// threads because HTTP/1 upgrades require it.
-pub trait UpgradableTransport<S, B>: sealed::Sealed + Sized {
+pub trait UpgradableTransport<S, B>: Sealed + Sized {
     /// The future returned by [`Server::handle_upgradable`] for this transport.
     type Handle;
 
@@ -628,11 +629,11 @@ where
     }
 }
 
-impl<T> sealed::Sealed for T where T: AsyncRead + AsyncWrite + Unpin + 'static {}
+impl<T> Sealed for T where T: AsyncRead + AsyncWrite + Unpin + 'static {}
 
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-impl<T> sealed::Sealed for Tls<T> where T: AsyncRead + AsyncWrite + Unpin + 'static {}
+impl<T> Sealed for Tls<T> where T: AsyncRead + AsyncWrite + Unpin + 'static {}
 
 impl Default for ConnectionBuilder {
     fn default() -> Self {

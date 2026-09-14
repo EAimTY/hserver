@@ -1,6 +1,6 @@
 [package]
 name = "hserver"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["EAimTY <ea.imty@gmail.com>"]
 description = "Configurable HTTP server with explicit accept-loop control and optional Rustls support"
 edition = "2024"
@@ -16,6 +16,7 @@ http2 = ["hyper-util/http2"]
 tls = ["dep:rustls", "dep:tokio-rustls"]
 
 [dev-dependencies]
+axum = { version = "0.8.9", default-features = false }
 futures = { version = "0.3", default-features = false, features = ["std"] }
 h2 = { version = "0.4", default-features = false }
 hserver = { path = ".", features = ["http1", "http2", "tls"] }
@@ -25,7 +26,7 @@ hyper = { version = "1.11.1", default-features = false }
 hyper-util = { version = "0.1.20", default-features = false, features = ["tokio"] }
 rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
 rustls = { version = "0.23.44", default-features = false, features = ["ring", "std"] }
-tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt", "sync", "time"] }
+tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
 tokio-rustls = { version = "0.26.5", default-features = false, features = ["ring"] }
 tower-service = { version = "0.3.3", default-features = false }
 
